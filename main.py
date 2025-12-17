@@ -131,21 +131,50 @@ class CameraApp:
     def process_frame(self, frame):
         if self.mode == "normal":
             return frame
+        
         elif self.mode == "motion":
             if self.prev_frame is None: return frame
-            gray_current = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            gray_prev = cv2.cvtColor(self.prev_frame, cv2.COLOR_BGR2GRAY)
-            diff = cv2.absdiff(gray_current, gray_prev)
-            _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-            return thresh
+            
+            # KROK 1: Różnica na pełnym obrazie kolorowym (3 kanały)
+            # Wykrywa zmiany koloru, nawet jeśli jasność jest podobna
+            diff_bgr = cv2.absdiff(frame, self.prev_frame)
+            
+            # KROK 2: Konwersja różnicy na odcienie szarości
+            diff_gray = cv2.cvtColor(diff_bgr, cv2.COLOR_BGR2GRAY)
+            
+            # KROK 3: Technika KWADRATOWA (Squaring)
+            # Zamieniamy na float, żeby móc podnosić do kwadratu bez błędów
+            diff_float = diff_gray.astype(np.float32)
+            
+            # Wzór: (różnica ^ 2) / 255
+            # Matematycznie "miażdży" małe różnice (szum) do zera,
+            # a duże różnice (ruch) zostawia wyraźne.
+            squared = (diff_float ** 2) / 255.0
+            
+            # Zamiana z powrotem na liczby całkowite (0-255)
+            motion_img = squared.astype(np.uint8)
+            
+            # KROK 4: Odcięcie szumów z zachowaniem odcieni (THRESH_TOZERO)
+            # Wszystko poniżej wartości 10 staje się idealnie czarne (0).
+            # Wszystko powyżej 10 ZACHOWUJE swoją jasność (nie robi się 255).
+            _, clean_motion = cv2.threshold(motion_img, 10, 255, cv2.THRESH_TOZERO)
+            
+            # KROK 5: Wzmocnienie wizualne
+            # Ponieważ potęgowanie przyciemnia obraz, mnożymy wynik x3, 
+            # żeby ruch był lepiej widoczny dla ludzkiego oka.
+            clean_motion = cv2.multiply(clean_motion, 3)
+            
+            return clean_motion
+
         elif self.mode == "anaglyph":
             if self.prev_frame is None: return frame
-            h, w, _ = frame.shape
-            anaglyph = np.zeros((h, w, 3), dtype=np.uint8)
-            anaglyph[:,:,0] = frame[:,:,0]
-            anaglyph[:,:,1] = frame[:,:,1]
-            anaglyph[:,:,2] = self.prev_frame[:,:,2]
+            # Tworzenie obrazu 3D
+            anaglyph = np.zeros_like(frame)
+            anaglyph[:,:,0] = frame[:,:,0] # Kanał Blue z obecnej klatki
+            anaglyph[:,:,1] = frame[:,:,1] # Kanał Green z obecnej klatki
+            anaglyph[:,:,2] = self.prev_frame[:,:,2] # Kanał Red z POPRZEDNIEJ klatki
             return anaglyph
+            
         return frame
 
     def set_mode(self, mode):
