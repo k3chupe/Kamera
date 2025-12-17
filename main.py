@@ -1,6 +1,6 @@
 import cv2
 import tkinter as tk
-from tkinter import Label, Button, Frame, Scale, HORIZONTAL, Checkbutton, IntVar
+from tkinter import Label, Button, Frame, Scale, HORIZONTAL
 from PIL import Image, ImageTk
 import datetime
 import os
@@ -11,11 +11,11 @@ class CameraApp:
         self.window = window
         self.window.title(window_title)
 
-        # 1. INICJALIZACJA KAMERY
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) 
-        # UWAGA: Dodałem 'cv2.CAP_DSHOW' - to tryb DirectShow w Windows, 
-        # który pozwala na lepszy dostęp do ustawień sprzętowych kamery.
-
+        # 1. INICJALIZACJA Z DIRECTSHOW (Kluczowe dla Windows)
+        # To pozwala na lepszą kontrolę sprzętową
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        
+        # Ustawienia domyślne rozdzielczości
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -32,28 +32,32 @@ class CameraApp:
         self.video_label = Label(window)
         self.video_label.pack(pady=10)
 
-        # --- PANEL STEROWANIA SPRZĘTOWEGO ---
-        self.hw_frame = Frame(window, bd=2, relief=tk.GROOVE)
+        # --- PANEL STEROWANIA SPRZĘTOWEGO (HARDWARE) ---
+        self.hw_frame = Frame(window, bd=2, relief=tk.GROOVE, bg="#dddddd")
         self.hw_frame.pack(fill=tk.X, padx=10, pady=5)
-        Label(self.hw_frame, text="USTAWIENIA SPRZĘTOWE KAMERY").pack()
+        
+        Label(self.hw_frame, text="STEROWANIE SPRZĘTOWE (HARDWARE)", bg="#dddddd", font=("Arial", 10, "bold")).pack(pady=2)
 
-        # Checkbox: Auto Ekspozycja
-        self.auto_exposure_var = IntVar(value=1) # Domyślnie włączone
-        self.cb_auto = Checkbutton(self.hw_frame, text="Auto Ekspozycja", 
-                                   variable=self.auto_exposure_var, command=self.toggle_auto_exposure)
-        self.cb_auto.pack()
+        # PRZYCISK "ATOMOWY" - Otwiera okno sterownika Windows
+        self.btn_settings = Button(self.hw_frame, text="OTWÓRZ SYSTEMOWY PANEL KAMERY", 
+                                   command=self.open_camera_settings, bg="#2196F3", fg="white", font=("Arial", 9, "bold"))
+        self.btn_settings.pack(pady=5, fill=tk.X, padx=20)
+        Label(self.hw_frame, text="(Najpewniejszy sposób na zablokowanie ekspozycji)", bg="#dddddd", font=("Arial", 8)).pack()
 
-        # Suwak Ekspozycji (Hardware)
-        # W Windows zazwyczaj wartości są ujemne potęgi 2 (np. -5 to jasno, -10 to ciemno)
-        # Ale zakres zależy od kamery. Ustawiam bezpieczny zakres -13 do -1.
-        Label(self.hw_frame, text="Czas naświetlania (Exposure):").pack()
-        self.exposure_slider = Scale(self.hw_frame, from_=-13, to=0, 
-                                     orient=HORIZONTAL, length=300, command=self.set_exposure)
-        self.exposure_slider.set(-5) 
-        self.exposure_slider.pack(pady=5)
-        # ------------------------------------
+        # Suwak Ekspozycji (Programowa próba sterowania)
+        self.slider_frame = Frame(self.hw_frame, bg="#dddddd")
+        self.slider_frame.pack(pady=5)
+        
+        Label(self.slider_frame, text="Lub spróbuj wymusić suwakiem (Exposure):", bg="#dddddd").pack()
+        # Zakres -13 (bardzo ciemno) do -1 (bardzo jasno). 
+        # Wartości dodatnie często nie działają w DSHOW.
+        self.exposure_slider = Scale(self.slider_frame, from_=-13, to=-1, resolution=1,
+                                     orient=HORIZONTAL, length=300, command=self.force_exposure, bg="#dddddd")
+        self.exposure_slider.set(-6)
+        self.exposure_slider.pack()
+        # ----------------------------------------------------
 
-        # Panel przycisków
+        # Panel przycisków nagrywania/zdjęć
         self.controls_frame = Frame(window)
         self.controls_frame.pack(fill=tk.X, pady=5)
 
@@ -66,10 +70,13 @@ class CameraApp:
         # Panel efektów
         self.effects_frame = Frame(window)
         self.effects_frame.pack(fill=tk.X, pady=10)
+        
         self.btn_normal = Button(self.effects_frame, text="Normalny", command=lambda: self.set_mode("normal"))
         self.btn_normal.pack(side=tk.LEFT, padx=2)
+        
         self.btn_motion = Button(self.effects_frame, text="Wykrywanie Ruchu", command=lambda: self.set_mode("motion"))
         self.btn_motion.pack(side=tk.LEFT, padx=2)
+        
         self.btn_anaglyph = Button(self.effects_frame, text="Anaglif 3D", command=lambda: self.set_mode("anaglyph"))
         self.btn_anaglyph.pack(side=tk.LEFT, padx=2)
 
@@ -83,40 +90,30 @@ class CameraApp:
         self.window.mainloop()
 
     # --- FUNKCJE SPRZĘTOWE ---
-    def toggle_auto_exposure(self):
-        # 1 = Auto, 0 = Manual (w teorii)
-        # W OpenCV często: 0.25 to Manual, 0.75 to Auto (dziwne mapowanie DirectShow)
-        state = self.auto_exposure_var.get()
+    def open_camera_settings(self):
+        # To jest "MAGICZNA" komenda.
+        # Wymusza na systemie Windows otwarcie natywnego okna konfiguracji sterownika.
+        self.cap.set(cv2.CAP_PROP_SETTINGS, 1)
+        self.status_label.config(text="Otwarto panel sterownika. Zmień tam ustawienia.")
+
+    def force_exposure(self, val):
+        # Próba "siłowego" wyłączenia Auto i ustawienia wartości
+        value = int(val)
         
-        if state == 1:
-            # Włącz Auto
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3) # 3 często oznacza Auto w Windows
-            print("Tryb Auto włączony")
-        else:
-            # Wyłącz Auto (Przejdź na Manual)
-            # Często trzeba ustawić 1 (Manual) albo 0.25 w zależności od sterownika
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
-            print("Tryb Manualny włączony")
-            
-            # Po przejściu na manual, odśwież wartość z suwaka
-            val = self.exposure_slider.get()
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, val)
-
-    def set_exposure(self, val):
-        # Działa tylko jeśli Auto jest wyłączone!
-        if self.auto_exposure_var.get() == 0:
-            value = int(val)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, value)
-            print(f"Ustawiono Hardware Exposure: {value}")
-
+        # KROK 1: Próba wyłączenia Auto Exposure (różne flagi dla różnych kamer)
+        # 1 = Manual (zazwyczaj)
+        # 0.25 = Manual (często w sterownikach DirectShow)
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) 
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25) 
+        
+        # KROK 2: Ustawienie wartości
+        self.cap.set(cv2.CAP_PROP_EXPOSURE, value)
+        print(f"Próba ustawienia ekspozycji: {value}")
     # -------------------------
 
     def update(self):
         ret, frame = self.cap.read()
         if ret:
-            # Tutaj NIE MA już cyfrowego rozjaśniania (convertScaleAbs)
-            # Obraz przychodzi z kamery już jasny/ciemny sprzętowo
-            
             processed_frame = self.process_frame(frame)
 
             if self.is_recording and self.out is not None:
@@ -154,7 +151,6 @@ class CameraApp:
             return anaglyph
         return frame
 
-    # Reszta funkcji bez zmian (take_snapshot, toggle_recording, set_mode...)
     def set_mode(self, mode):
         self.mode = mode
         self.status_label.config(text=f"Tryb: {mode}")
@@ -165,7 +161,7 @@ class CameraApp:
             processed = self.process_frame(frame)
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             cv2.imwrite(f"galeria/foto_{ts}.jpg", processed)
-            print("Zapisano")
+            self.status_label.config(text="Zapisano zdjęcie")
 
     def toggle_recording(self):
         if not self.is_recording:
@@ -179,6 +175,7 @@ class CameraApp:
             self.is_recording = False
             self.btn_record.config(text="Nagraj", bg="#f44336")
             if self.out: self.out.release()
+            self.out = None
 
     def on_closing(self):
         self.cap.release()
@@ -187,4 +184,4 @@ class CameraApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = CameraApp(root, "Kamera Laboratorium - Sterowanie Sprzętowe")
+    app = CameraApp(root, "Kamera Lab - Pełna Kontrola Sprzętowa")
