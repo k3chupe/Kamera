@@ -1,0 +1,20 @@
+# Wirtualne środowisko
+venv/
+__pycache__/
+*.pyc
+
+# Wygenerowane pliki przez Twój program
+galeria/
+
+# Pliki tymczasowe i systemowe
+.DS_Store
+Thumbs.db
+
+# Pliki tworzone przez PyInstallera (przy robieniu .exe)
+build/
+dist/
+*.spec
+
+# Ustawienia edytorów (VS Code, Pycharm)
+.vscode/
+.idea/
